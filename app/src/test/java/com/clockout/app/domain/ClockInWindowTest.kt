@@ -7,15 +7,11 @@ import org.junit.Test
 
 class ClockInWindowTest {
     @Test
-    fun `clock-in window includes both endpoints`() {
-        assertTrue(ClockInWindow.contains(8 * 60 + 30))
-        assertTrue(ClockInWindow.contains(9 * 60 + 10))
-    }
-
-    @Test
-    fun `clock-in window rejects minutes immediately outside the range`() {
-        assertFalse(ClockInWindow.contains(8 * 60 + 29))
-        assertFalse(ClockInWindow.contains(9 * 60 + 11))
+    fun `default clock-in range is eight thirty through nine`() {
+        val settings = AppSettings()
+        assertTrue(settings.clockInRangeEnabled)
+        assertEquals(8 * 60 + 30, settings.clockInStartMinute)
+        assertEquals(9 * 60, settings.clockInEndMinute)
     }
 
     @Test
@@ -38,5 +34,10 @@ class ClockInWindowTest {
                 zoneId = "Asia/Shanghai",
             ).plannedLunchMinutes,
         )
+    }
+
+    @Test
+    fun `quick lunch input is the default style`() {
+        assertEquals(LunchInputStyle.QUICK, AppSettings().lunchInputStyle)
     }
 }

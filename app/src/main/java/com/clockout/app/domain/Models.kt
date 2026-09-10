@@ -4,17 +4,15 @@ import java.time.Instant
 
 enum class LunchMode { FIXED, ACTUAL }
 
+enum class LunchInputStyle { QUICK, WHEEL }
+
 enum class AppThemeStyle { SILVER, MIST, MIDNIGHT, OCEAN, TEA }
 
 enum class AppFontStyle { SYSTEM, NOTEBOOK, SERIF }
 
-/** Bounds used by the quick clock-in editor on today's screen. */
-object ClockInWindow {
-    const val MINUTE_MIN = 8 * 60 + 30
-    const val MINUTE_MAX = 9 * 60 + 10
-    const val DEFAULT_MINUTE = 9 * 60
-
-    fun contains(minuteOfDay: Int): Boolean = minuteOfDay in MINUTE_MIN..MINUTE_MAX
+object ClockInRangeDefaults {
+    const val START_MINUTE = 8 * 60 + 30
+    const val END_MINUTE = 9 * 60
 }
 
 /** New and unfinished records use this fixed-lunch range; completed history is left untouched. */
@@ -55,6 +53,9 @@ data class WorkSummary(
 
 data class AppSettings(
     val workMinutes: Int = 480,
+    val clockInRangeEnabled: Boolean = true,
+    val clockInStartMinute: Int = ClockInRangeDefaults.START_MINUTE,
+    val clockInEndMinute: Int = ClockInRangeDefaults.END_MINUTE,
     val lunchMode: LunchMode = LunchMode.ACTUAL,
     val lunchMinutes: Int = LunchDurationLimits.DEFAULT_MINUTES,
     val reminderEnabled: Boolean = false,
@@ -62,6 +63,7 @@ data class AppSettings(
     val hapticsEnabled: Boolean = true,
     val use24Hour: Boolean = true,
     val showLunchControls: Boolean = true,
+    val lunchInputStyle: LunchInputStyle = LunchInputStyle.QUICK,
     val themeStyle: AppThemeStyle = AppThemeStyle.SILVER,
     val fontStyle: AppFontStyle = AppFontStyle.SYSTEM,
 )

@@ -7,7 +7,6 @@ import com.clockout.app.ClockOutApplication
 import com.clockout.app.data.ClockOutRepository
 import com.clockout.app.domain.AppSettings
 import com.clockout.app.domain.DayStatus
-import com.clockout.app.domain.ClockInWindow
 import com.clockout.app.domain.LunchMode
 import com.clockout.app.domain.LunchDurationLimits
 import com.clockout.app.domain.WorkDay
@@ -73,8 +72,13 @@ class ClockOutViewModel(application: Application) : AndroidViewModel(application
 
     fun clockIn() = mutateToday { it.copy(clockIn = Instant.now()) }
     fun clockInAtMinute(minuteOfDay: Int) {
-        if (!ClockInWindow.contains(minuteOfDay)) {
-            error.value = "上班时间需在 08:30～09:10 之间"
+        if (minuteOfDay !in 0 until 24 * 60) {
+            error.value = "请输入有效的打卡时间"
+            return
+        }
+        val settings = uiState.value.settings
+        if (settings.clockInRangeEnabled && minuteOfDay !in settings.clockInStartMinute..settings.clockInEndMinute) {
+            error.value = "打卡时间需在 ${formatMinuteOfDay(settings.clockInStartMinute)}～${formatMinuteOfDay(settings.clockInEndMinute)} 之间"
             return
         }
         val date = LocalDate.now()

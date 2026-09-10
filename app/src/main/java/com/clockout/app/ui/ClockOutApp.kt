@@ -22,6 +22,8 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -40,6 +42,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.lazy.LazyColumn
@@ -55,6 +58,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EventAvailable
@@ -84,9 +88,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Snackbar
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -130,10 +131,10 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.clockout.app.domain.AppSettings
 import com.clockout.app.domain.AppThemeStyle
-import com.clockout.app.domain.ClockInWindow
 import com.clockout.app.domain.DayStatus
 import com.clockout.app.domain.LunchMode
 import com.clockout.app.domain.LunchDurationLimits
+import com.clockout.app.domain.LunchInputStyle
 import com.clockout.app.domain.WorkDay
 import com.clockout.app.domain.WorkTimeCalculator
 import com.clockout.app.domain.status
@@ -176,13 +177,14 @@ private fun ClockOutScaffold(vm: ClockOutViewModel, state: ClockOutUiState) {
     var tab by rememberSaveable { mutableStateOf(Tab.TODAY) }
     var detailId by rememberSaveable { mutableStateOf<Long?>(null) }
     var showDeleteAll by remember { mutableStateOf(false) }
-    val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(state.message, state.error) {
-        (state.message ?: state.error)?.let { snackbar.showSnackbar(it); vm.clearNotice() }
+        if (state.message != null || state.error != null) {
+            delay(5_000)
+            vm.clearNotice()
+        }
     }
     Scaffold(
         containerColor = PageBg,
-        snackbarHost = { SnackbarHost(snackbar) { data -> Snackbar(snackbarData = data, containerColor = Glass, contentColor = TextPrimary, actionColor = AccentStrong, shape = RoundedCornerShape(16.dp), modifier = Modifier.padding(12.dp).border(1.dp, GlassBorder, RoundedCornerShape(16.dp))) } },
         bottomBar = {
             GlassNavigation(tab) { tab = it; detailId = null }
         },
@@ -204,6 +206,18 @@ private fun ClockOutScaffold(vm: ClockOutViewModel, state: ClockOutUiState) {
                     else -> SettingsScreen(state.settings, vm, onDeleteAll = { showDeleteAll = true })
                 }
             }
+            AnimatedVisibility(
+                visible = state.message != null || state.error != null,
+                modifier = Modifier.align(Alignment.TopEnd).padding(top = 10.dp, end = 12.dp),
+                enter = fadeIn(tween(160)) + slideInVertically(tween(190)) { -it / 2 },
+                exit = fadeOut(tween(130)),
+            ) {
+                AppNotice(
+                    message = state.error ?: state.message.orEmpty(),
+                    isError = state.error != null,
+                    onDismiss = vm::clearNotice,
+                )
+            }
         }
     }
     if (showDeleteAll) {
@@ -217,6 +231,44 @@ private fun ClockOutScaffold(vm: ClockOutViewModel, state: ClockOutUiState) {
             titleContentColor = TextPrimary,
             textContentColor = Muted,
         )
+    }
+}
+
+@Composable
+private fun AppNotice(message: String, isError: Boolean, onDismiss: () -> Unit) {
+    var dragOffset by remember(message) { mutableStateOf(0f) }
+    val animatedOffset by animateFloatAsState(dragOffset, tween(150), label = "notice-swipe")
+    val container = if (isError) Rose.copy(alpha = .18f) else Glass.copy(alpha = .97f)
+    val border = if (isError) Rose.copy(alpha = .62f) else GlassBorder
+    val content = if (isError) Rose else TextPrimary
+    Row(
+        Modifier
+            .widthIn(min = 190.dp, max = 300.dp)
+            .offset { IntOffset(animatedOffset.roundToInt(), 0) }
+            .alpha((1f - animatedOffset / 330f).coerceIn(.25f, 1f))
+            .shadow(10.dp, RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(16.dp))
+            .background(container)
+            .border(1.dp, border, RoundedCornerShape(16.dp))
+            .pointerInput(message) {
+                detectHorizontalDragGestures(
+                    onHorizontalDrag = { change, amount ->
+                        change.consume()
+                        dragOffset = (dragOffset + amount).coerceAtLeast(0f)
+                    },
+                    onDragEnd = {
+                        if (dragOffset > 90f) onDismiss() else dragOffset = 0f
+                    },
+                    onDragCancel = { dragOffset = 0f },
+                )
+            }
+            .padding(start = 13.dp, top = 10.dp, end = 5.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(message, color = content, fontSize = 12.sp, lineHeight = 16.sp, modifier = Modifier.weight(1f))
+        IconButton(onClick = onDismiss, modifier = Modifier.size(34.dp)) {
+            Icon(Icons.Default.Close, "关闭通知", tint = content.copy(alpha = .82f), modifier = Modifier.size(17.dp))
+        }
     }
 }
 
@@ -253,10 +305,20 @@ private fun ClockOutScaffold(vm: ClockOutViewModel, state: ClockOutUiState) {
 @Composable private fun TodayScreen(state: ClockOutUiState, vm: ClockOutViewModel) {
     val day = state.today
     var editOpen by remember { mutableStateOf(false) }
-    var preparedMinute by rememberSaveable { mutableIntStateOf(ClockInWindow.DEFAULT_MINUTE) }
-    LaunchedEffect(day?.clockIn, day?.zoneId) {
-        day?.clockIn?.atZone(ZoneId.of(day.zoneId))?.toLocalTime()?.let {
-            preparedMinute = it.hour * 60 + it.minute
+    val currentMinute = remember(state.now) {
+        state.now.atZone(ZoneId.systemDefault()).toLocalTime().let { it.hour * 60 + it.minute }
+    }
+    val dateKey = remember(state.now) { state.now.atZone(ZoneId.systemDefault()).toLocalDate().toString() }
+    var preparedMinute by rememberSaveable(dateKey) { mutableIntStateOf(currentMinute) }
+    val rangeStart = state.settings.clockInStartMinute.takeIf { state.settings.clockInRangeEnabled }
+    val rangeEnd = state.settings.clockInEndMinute.takeIf { state.settings.clockInRangeEnabled }
+    LaunchedEffect(day?.clockIn, day?.zoneId, rangeStart, rangeEnd) {
+        if (day?.clockIn != null) {
+            day.clockIn.atZone(ZoneId.of(day.zoneId)).toLocalTime().let {
+                preparedMinute = it.hour * 60 + it.minute
+            }
+        } else if (rangeStart != null && rangeEnd != null) {
+            preparedMinute = preparedMinute.coerceIn(rangeStart, rangeEnd)
         }
     }
     val primaryAction: () -> Unit = {
@@ -273,7 +335,7 @@ private fun ClockOutScaffold(vm: ClockOutViewModel, state: ClockOutUiState) {
         val finished = day?.status() == DayStatus.FINISHED
         val cardColor by animateColorAsState(Glass, tween(320), label = "card")
         if (day == null || day.clockIn == null) {
-            ClockInCard(cardColor, preparedMinute, { preparedMinute = it }, primaryAction)
+            ClockInCard(cardColor, preparedMinute, rangeStart, rangeEnd, { preparedMinute = it }, primaryAction)
         } else {
             ExpectedCard(
                 day = day,
@@ -281,12 +343,14 @@ private fun ClockOutScaffold(vm: ClockOutViewModel, state: ClockOutUiState) {
                 state = state,
                 finished = finished,
                 preparedMinute = preparedMinute,
+                rangeStartMinute = rangeStart,
+                rangeEndMinute = rangeEnd,
                 onPreparedMinuteChange = { preparedMinute = it },
                 onPreparedMinuteCommit = vm::clockInAtMinute,
                 onPrimaryAction = primaryAction,
             )
         }
-        if (state.settings.showLunchControls) LunchControls(day, vm, state.now, state.settings.lunchMinutes, state.settings.hapticsEnabled)
+        if (state.settings.showLunchControls) LunchControls(day, vm, state.now, state.settings.lunchMinutes, state.settings.lunchInputStyle, state.settings.hapticsEnabled)
         Timeline(day)
         day?.let { TextButton(onClick = { editOpen = true }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.textButtonColors(contentColor = AccentStrong)) { Icon(Icons.Default.Edit, null); Spacer(Modifier.width(8.dp)); Text("编辑今日记录", fontWeight = FontWeight.SemiBold) } }
         if (state.previousOpen.isNotEmpty()) Card(colors = CardDefaults.cardColors(containerColor = Rose.copy(alpha = .10f)), shape = RoundedCornerShape(16.dp), modifier = Modifier.border(1.dp, Rose.copy(alpha = .35f), RoundedCornerShape(16.dp))) { Text("发现 ${state.previousOpen.size} 条前一天未完成的记录，请到“记录”页补录下班时间。", color = Rose, modifier = Modifier.padding(14.dp), fontSize = 13.sp) }
@@ -301,6 +365,8 @@ private fun ExpectedCard(
     state: ClockOutUiState,
     finished: Boolean,
     preparedMinute: Int,
+    rangeStartMinute: Int?,
+    rangeEndMinute: Int?,
     onPreparedMinuteChange: (Int) -> Unit,
     onPreparedMinuteCommit: (Int) -> Unit,
     onPrimaryAction: () -> Unit,
@@ -321,6 +387,8 @@ private fun ExpectedCard(
                         ClockInTimeEditor(
                             label = "打卡时间",
                             minuteOfDay = preparedMinute,
+                            rangeStartMinute = rangeStartMinute,
+                            rangeEndMinute = rangeEndMinute,
                             onMinuteChange = onPreparedMinuteChange,
                             onCommit = onPreparedMinuteCommit,
                         )
@@ -348,6 +416,8 @@ private fun ExpectedCard(
 private fun ClockInCard(
     cardColor: Color,
     preparedMinute: Int,
+    rangeStartMinute: Int?,
+    rangeEndMinute: Int?,
     onPreparedMinuteChange: (Int) -> Unit,
     onConfirm: () -> Unit,
 ) {
@@ -358,7 +428,7 @@ private fun ClockInCard(
                 Spacer(Modifier.width(9.dp))
                 Text("先记录今天的开始", color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
             }
-            ClockInTimeEditor(label = "打卡时间", minuteOfDay = preparedMinute, onMinuteChange = onPreparedMinuteChange, onCommit = {})
+            ClockInTimeEditor(label = "打卡时间", minuteOfDay = preparedMinute, rangeStartMinute = rangeStartMinute, rangeEndMinute = rangeEndMinute, onMinuteChange = onPreparedMinuteChange, onCommit = {})
             Text("确认后自动参考上个工作日午休；没有历史时使用默认午休。", color = Muted, fontSize = 12.sp, lineHeight = 17.sp)
             Spacer(Modifier.height(2.dp))
             PrimaryActionButton(null, onConfirm, Modifier.height(50.dp), compact = true)
@@ -415,6 +485,8 @@ private fun ExpectedTimeHero(time: String, estimate: String, onEditClockIn: () -
 internal fun ClockInTimeEditor(
     label: String,
     minuteOfDay: Int,
+    rangeStartMinute: Int? = null,
+    rangeEndMinute: Int? = null,
     onMinuteChange: (Int) -> Unit,
     onCommit: (Int) -> Unit,
 ) {
@@ -423,11 +495,17 @@ internal fun ClockInTimeEditor(
         mutableStateOf(TextFieldValue(formatted, TextRange(formatted.length)))
     }
     var inputError by remember { mutableStateOf<String?>(null) }
-    val boundedMinute = minuteOfDay.coerceIn(ClockInWindow.MINUTE_MIN, ClockInWindow.MINUTE_MAX)
+    val hasRange = rangeStartMinute != null && rangeEndMinute != null && rangeStartMinute < rangeEndMinute
+    val rangeStart = if (hasRange) rangeStartMinute!! else 0
+    val rangeEnd = if (hasRange) rangeEndMinute!! else 1439
+    val boundedMinute = minuteOfDay.coerceIn(rangeStart, rangeEnd)
+    fun rangeError(): String = "请输入 ${formatMinuteOfDay(rangeStart)}～${formatMinuteOfDay(rangeEnd)} 之间的时间"
     val commitInput = {
         val parsed = parseMinuteOfDay(input.text)
-        if (parsed == null || !ClockInWindow.contains(parsed)) {
-            inputError = "输入 856 或 08:56，范围 08:30～09:10"
+        if (parsed == null) {
+            inputError = "请输入 856、08:56 或 1230"
+        } else if (hasRange && parsed !in rangeStart..rangeEnd) {
+            inputError = rangeError()
         } else {
             inputError = null
             val formatted = formatMinuteOfDay(parsed)
@@ -457,12 +535,16 @@ internal fun ClockInTimeEditor(
                     input = TextFieldValue(filtered, TextRange(filtered.length))
                     inputError = null
                     val digits = filtered.filter(Char::isDigit)
-                    if (!filtered.contains(':') && digits.length in 3..4) {
-                        parseMinuteOfDay(digits)?.takeIf(ClockInWindow::contains)?.let { parsed ->
+                    if (!filtered.contains(':') && isCompleteCompactTime(digits)) {
+                        parseMinuteOfDay(digits)?.let { parsed ->
                             val formatted = formatMinuteOfDay(parsed)
                             input = TextFieldValue(formatted, TextRange(formatted.length))
-                            onMinuteChange(parsed)
-                            onCommit(parsed)
+                            if (hasRange && parsed !in rangeStart..rangeEnd) {
+                                inputError = rangeError()
+                            } else {
+                                onMinuteChange(parsed)
+                                onCommit(parsed)
+                            }
                         }
                     }
                 },
@@ -480,33 +562,36 @@ internal fun ClockInTimeEditor(
                 },
             )
         }
-        Slider(
-            value = boundedMinute.toFloat(),
-            onValueChange = { raw ->
-                val minute = raw.roundToInt().coerceIn(ClockInWindow.MINUTE_MIN, ClockInWindow.MINUTE_MAX)
-                inputError = null
-                val formatted = formatMinuteOfDay(minute)
-                input = TextFieldValue(formatted, TextRange(formatted.length))
-                onMinuteChange(minute)
-            },
-            onValueChangeFinished = { onCommit(boundedMinute) },
-            valueRange = ClockInWindow.MINUTE_MIN.toFloat()..ClockInWindow.MINUTE_MAX.toFloat(),
-            steps = ClockInWindow.MINUTE_MAX - ClockInWindow.MINUTE_MIN - 1,
-            colors = androidx.compose.material3.SliderDefaults.colors(
-                thumbColor = AccentStrong,
-                activeTrackColor = AccentStrong.copy(alpha = .70f),
-                inactiveTrackColor = TextPrimary.copy(alpha = .14f),
-            ),
-        )
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("08:30", color = Muted, fontSize = 10.sp)
-            Text("09:10", color = Muted, fontSize = 10.sp)
+        if (hasRange) {
+            Slider(
+                value = boundedMinute.toFloat(),
+                onValueChange = { raw ->
+                    val minute = raw.roundToInt().coerceIn(rangeStart, rangeEnd)
+                    inputError = null
+                    val formatted = formatMinuteOfDay(minute)
+                    input = TextFieldValue(formatted, TextRange(formatted.length))
+                    onMinuteChange(minute)
+                },
+                onValueChangeFinished = { onCommit(boundedMinute) },
+                valueRange = rangeStart.toFloat()..rangeEnd.toFloat(),
+                steps = (rangeEnd - rangeStart - 1).coerceAtLeast(0),
+                colors = androidx.compose.material3.SliderDefaults.colors(thumbColor = AccentStrong, activeTrackColor = AccentStrong.copy(alpha = .70f), inactiveTrackColor = TextPrimary.copy(alpha = .14f)),
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(formatMinuteOfDay(rangeStart), color = Muted, fontSize = 10.sp)
+                Text(formatMinuteOfDay(rangeEnd), color = Muted, fontSize = 10.sp)
+            }
+        } else {
+            Text("可输入任意打卡时间，如 856 或 12:30", color = Muted, fontSize = 10.sp)
         }
         inputError?.let { Text(it, color = Rose, fontSize = 10.sp, lineHeight = 14.sp) }
-        if (!ClockInWindow.contains(minuteOfDay)) {
-            Text("原记录 ${formatMinuteOfDay(minuteOfDay)} 超出新范围；拖动或输入后将按新范围保存。", color = Rose, fontSize = 10.sp, lineHeight = 14.sp)
-        }
     }
+}
+
+internal fun isCompleteCompactTime(digits: String): Boolean = when (digits.length) {
+    3 -> digits.take(2).toIntOrNull()?.let { it > 23 } == true
+    4 -> true
+    else -> false
 }
 
 internal fun formatMinuteOfDay(minuteOfDay: Int): String = "%02d:%02d".format(
@@ -604,7 +689,7 @@ private fun PrimaryActionButton(day: WorkDay?, onClick: () -> Unit, modifier: Mo
     }
 }
 
-@Composable private fun LunchControls(day: WorkDay?, vm: ClockOutViewModel, now: Instant, defaultLunchMinutes: Int, hapticsEnabled: Boolean) {
+@Composable private fun LunchControls(day: WorkDay?, vm: ClockOutViewModel, now: Instant, defaultLunchMinutes: Int, inputStyle: LunchInputStyle, hapticsEnabled: Boolean) {
     var mode by remember(day?.id, day?.lunchMode) { mutableStateOf(day?.lunchMode ?: LunchMode.FIXED) }
     Card(colors = CardDefaults.cardColors(containerColor = GlassSoft), shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth().border(1.dp, GlassBorder, RoundedCornerShape(20.dp))) {
       Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
@@ -624,13 +709,16 @@ private fun PrimaryActionButton(day: WorkDay?, onClick: () -> Unit, modifier: Mo
             Slider(value = draftMinutes.toFloat(), onValueChange = { raw -> val tick = (raw / LunchDurationLimits.STEP_MINUTES).toInt() * LunchDurationLimits.STEP_MINUTES; if (tick != lastTick) { if (hapticsEnabled) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove); lastTick = tick }; draftMinutes = tick }, onValueChangeFinished = { vm.setLunchMinutes(draftMinutes) }, valueRange = LunchDurationLimits.MIN_MINUTES.toFloat()..LunchDurationLimits.MAX_MINUTES.toFloat(), steps = 17, modifier = Modifier.fillMaxWidth(), colors = androidx.compose.material3.SliderDefaults.colors(thumbColor = AccentStrong, activeTrackColor = AccentStrong.copy(alpha = .65f), inactiveTrackColor = TextPrimary.copy(alpha = .14f)))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) { listOf(0, 30, 60, LunchDurationLimits.MAX_MINUTES).forEach { value -> FilterChip(selected = draftMinutes == value, onClick = { draftMinutes = value; vm.setLunchMinutes(value) }, modifier = Modifier.weight(1f), label = { Text("$value", fontSize = 11.sp, maxLines = 1) }, colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(selectedContainerColor = Accent, selectedLabelColor = ClockOutVisuals.colors.onAccent, labelColor = Muted), border = androidx.compose.material3.FilterChipDefaults.filterChipBorder(enabled = true, selected = draftMinutes == value, borderColor = GlassBorder, selectedBorderColor = Accent)) } }
         } else {
-            when {
-                day?.clockIn == null -> Text("上班后可记录实际午休", color = Muted, fontSize = 13.sp)
-                day.lunchStart == null -> Button(onClick = vm::startLunch, modifier = Modifier.fillMaxWidth().height(46.dp).clip(RoundedCornerShape(14.dp)).background(Brush.verticalGradient(listOf(Accent, Accent.copy(alpha = Accent.alpha * .58f)))).border(1.dp, AccentStrong.copy(alpha = .22f), RoundedCornerShape(14.dp)), shape = RoundedCornerShape(14.dp), colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent, contentColor = ClockOutVisuals.colors.onAccent)) { Icon(Icons.Default.Restaurant, "开始午休", modifier = Modifier.size(17.dp)); Spacer(Modifier.width(8.dp)); Text("开始午休") }
-                day.lunchEnd == null -> Text("午休已进行 ${vm.formatDuration(Duration.between(day.lunchStart, now).toMinutes())} · 请在预计下班卡片结束午休", color = Muted, fontSize = 13.sp, lineHeight = 18.sp)
-                else -> Text("实际午休 · ${vm.formatDuration(Duration.between(day.lunchStart, day.lunchEnd).toMinutes())}", color = Muted, fontSize = 13.sp)
+            if (day?.clockIn == null) {
+                Text("上班后可记录实际午休", color = Muted, fontSize = 13.sp)
+            } else {
+                if (inputStyle == LunchInputStyle.QUICK) ManualLunchEditor(day, vm) else LunchStartWheel(day, vm, hapticsEnabled)
+                when {
+                    day.lunchStart == null -> OutlinedButton(onClick = vm::startLunch, modifier = Modifier.fillMaxWidth().height(42.dp), shape = RoundedCornerShape(14.dp), colors = ButtonDefaults.outlinedButtonColors(contentColor = Muted)) { Icon(Icons.Default.Restaurant, "按当前时间开始午休", modifier = Modifier.size(16.dp)); Spacer(Modifier.width(7.dp)); Text("按当前时间开始", fontSize = 12.sp) }
+                    day.lunchEnd == null -> Text("午休已进行 ${vm.formatDuration(Duration.between(day.lunchStart, now).toMinutes())} · 可在预计下班卡片结束午休", color = Muted, fontSize = 12.sp, lineHeight = 17.sp)
+                    else -> Text("实际午休 · ${vm.formatDuration(Duration.between(day.lunchStart, day.lunchEnd).toMinutes())}", color = Muted, fontSize = 12.sp)
+                }
             }
-            if (day?.clockIn != null) ManualLunchEditor(day, vm)
         }
       }
     }
@@ -649,9 +737,9 @@ private fun ManualLunchEditor(day: WorkDay, vm: ClockOutViewModel) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.Edit, null, tint = AccentStrong, modifier = Modifier.size(16.dp))
             Spacer(Modifier.width(7.dp))
-            Text("手动补录午休", color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            Text("快速记录午休", color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.weight(1f))
-            Text("可输入 1210", color = Weak, fontSize = 9.sp)
+            Text("输入 1230 → 12:30", color = Weak, fontSize = 9.sp)
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
             ManualTimeField("开始", start, { start = it }, Modifier.weight(1f))
@@ -670,7 +758,14 @@ private fun ManualLunchEditor(day: WorkDay, vm: ClockOutViewModel) {
 private fun ManualTimeField(label: String, value: String, onValueChange: (String) -> Unit, modifier: Modifier) {
     OutlinedTextField(
         value = value,
-        onValueChange = { raw -> onValueChange(raw.filter { it.isDigit() || it == ':' }.take(5)) },
+        onValueChange = { raw ->
+            val normalized = normalizeClockInput(value, raw)
+            val digits = normalized.filter(Char::isDigit)
+            val formatted = if (!normalized.contains(':') && digits.length == 4) {
+                parseMinuteOfDay(digits)?.let(::formatMinuteOfDay) ?: normalized
+            } else normalized
+            onValueChange(formatted)
+        },
         placeholder = { Text(if (label == "开始") "12:00" else "13:30", color = Weak, fontSize = 11.sp) },
         prefix = { Text(label, color = Muted, fontSize = 9.sp) },
         singleLine = true,
@@ -685,6 +780,73 @@ private fun ManualTimeField(label: String, value: String, onValueChange: (String
         textStyle = MaterialTheme.typography.bodySmall.copy(color = TextPrimary, fontWeight = FontWeight.SemiBold),
         modifier = modifier,
     )
+}
+
+@Composable
+private fun LunchStartWheel(day: WorkDay, vm: ClockOutViewModel, hapticsEnabled: Boolean) {
+    val minMinute = 11 * 60 + 40
+    val maxMinute = 12 * 60 + 30
+    val savedMinute = day.lunchStart?.atZone(ZoneId.of(day.zoneId))?.toLocalTime()?.let { it.hour * 60 + it.minute }
+    val initialMinute = savedMinute?.takeIf { it in minMinute..maxMinute } ?: 12 * 60
+    var selectedMinute by remember(day.id, day.lunchStart) { mutableIntStateOf(initialMinute) }
+    var dragRemainder by remember { mutableStateOf(0f) }
+    val haptics = LocalHapticFeedback.current
+    val tickPx = with(LocalDensity.current) { 30.dp.toPx() }
+
+    fun select(minute: Int) {
+        val bounded = minute.coerceIn(minMinute, maxMinute)
+        if (bounded != selectedMinute) {
+            selectedMinute = bounded
+            if (hapticsEnabled) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        }
+    }
+
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Brush.verticalGradient(listOf(TextPrimary.copy(alpha = .05f), TextPrimary.copy(alpha = .018f)))).border(1.dp, GlassBorder, RoundedCornerShape(16.dp)).padding(11.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.MoreTime, null, tint = AccentStrong, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(7.dp))
+            Text("午休开始时间", color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.weight(1f))
+            Text("11:40～12:30", color = Weak, fontSize = 9.sp)
+        }
+        Box(
+            Modifier.fillMaxWidth().height(150.dp).clip(RoundedCornerShape(14.dp)).background(Glass.copy(alpha = .42f)).pointerInput(minMinute, maxMinute) {
+                detectVerticalDragGestures(
+                    onDragEnd = { dragRemainder = 0f },
+                    onDragCancel = { dragRemainder = 0f },
+                ) { change, dragAmount ->
+                    change.consume()
+                    dragRemainder += dragAmount
+                    while (dragRemainder <= -tickPx) { select(selectedMinute + 1); dragRemainder += tickPx }
+                    while (dragRemainder >= tickPx) { select(selectedMinute - 1); dragRemainder -= tickPx }
+                }
+            },
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(Modifier.fillMaxWidth().height(34.dp).padding(horizontal = 24.dp).clip(RoundedCornerShape(11.dp)).background(Accent.copy(alpha = .42f)).border(1.dp, AccentStrong.copy(alpha = .28f), RoundedCornerShape(11.dp)))
+            Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center) {
+                ((selectedMinute - 2)..(selectedMinute + 2)).forEach { minute ->
+                    val valid = minute in minMinute..maxMinute
+                    val distance = kotlin.math.abs(minute - selectedMinute)
+                    Box(
+                        Modifier.fillMaxWidth().height(30.dp).clickable(enabled = valid) { select(minute) },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (valid) Text(formatMinuteOfDay(minute), color = if (distance == 0) AccentStrong else Muted.copy(alpha = if (distance == 1) .72f else .38f), fontSize = if (distance == 0) 20.sp else 13.sp, fontWeight = if (distance == 0) FontWeight.Bold else FontWeight.Normal, style = MaterialTheme.typography.bodyLarge.copy(fontFeatureSettings = "tnum"))
+                    }
+                }
+            }
+        }
+        Button(
+            onClick = { vm.saveManualLunch(formatMinuteOfDay(selectedMinute), "") },
+            modifier = Modifier.fillMaxWidth().height(44.dp),
+            shape = RoundedCornerShape(14.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = ClockOutVisuals.colors.onAccent),
+        ) { Text("保存午休开始 ${formatMinuteOfDay(selectedMinute)}", fontSize = 12.sp, fontWeight = FontWeight.SemiBold) }
+    }
 }
 
 @Composable private fun Timeline(day: WorkDay?) {

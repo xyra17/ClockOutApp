@@ -13,14 +13,18 @@ class ClockInTimeInputTest {
 
     @Test
     fun `compact numeric input is recognized without a colon`() {
+        assertEquals(0, parseMinuteOfDay("0000"))
         assertEquals(8 * 60 + 56, parseMinuteOfDay("856"))
         assertEquals(9 * 60 + 1, parseMinuteOfDay("901"))
         assertEquals(8 * 60 + 56, parseMinuteOfDay("0856"))
+        assertEquals(12 * 60 + 30, parseMinuteOfDay("1230"))
+        assertEquals(23 * 60 + 59, parseMinuteOfDay("2359"))
     }
 
     @Test
     fun `manual time input rejects invalid clock values`() {
         assertNull(parseMinuteOfDay("9:60"))
+        assertNull(parseMinuteOfDay("2400"))
         assertNull(parseMinuteOfDay("09.10"))
         assertNull(parseMinuteOfDay("text"))
     }
@@ -36,5 +40,13 @@ class ClockInTimeInputTest {
         assertEquals("8", normalizeClockInput("09:00", "09:008"))
         assertEquals("856", normalizeClockInput("09:00", "09:00856"))
         assertEquals("85", normalizeClockInput("8", "85"))
+    }
+
+    @Test
+    fun `compact input waits for a possible two digit hour`() {
+        assertEquals(true, isCompleteCompactTime("856"))
+        assertEquals(true, isCompleteCompactTime("901"))
+        assertEquals(false, isCompleteCompactTime("123"))
+        assertEquals(true, isCompleteCompactTime("1230"))
     }
 }

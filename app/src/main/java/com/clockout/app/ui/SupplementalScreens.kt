@@ -4,6 +4,7 @@ import android.Manifest
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
@@ -11,6 +12,7 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -218,11 +220,28 @@ private fun statusLabel(day: WorkDay) = when (day.status()) { DayStatus.REST_DAY
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
     var customWork by remember(settings.workMinutes) { mutableStateOf(hoursInput(settings.workMinutes)) }
     var workError by remember { mutableStateOf<String?>(null) }
+    var clockInStart by remember(settings.clockInStartMinute) { mutableStateOf(formatMinuteOfDay(settings.clockInStartMinute)) }
+    var clockInEnd by remember(settings.clockInEndMinute) { mutableStateOf(formatMinuteOfDay(settings.clockInEndMinute)) }
+    var clockInRangeError by remember { mutableStateOf<String?>(null) }
     var customLead by remember(settings.reminderLeadMinutes) { mutableStateOf(settings.reminderLeadMinutes.toString()) }
     fun saveWork() {
         val hours = customWork.replace(',', '.').toDoubleOrNull()
         if (hours == null || hours <= 0.0 || hours > 24.0) workError = "请输入 0～24 之间的小时数"
         else { workError = null; vm.updateSettings { it.copy(workMinutes = (hours * 60).roundToInt().coerceIn(1, 1440)) } }
+    }
+    fun saveClockInRange() {
+        val start = parseMinuteOfDay(clockInStart)
+        val end = parseMinuteOfDay(clockInEnd)
+        when {
+            start == null || end == null -> clockInRangeError = "请输入类似 830 或 08:30 的时间"
+            start >= end -> clockInRangeError = "结束时间需要晚于开始时间"
+            else -> {
+                clockInRangeError = null
+                clockInStart = formatMinuteOfDay(start)
+                clockInEnd = formatMinuteOfDay(end)
+                vm.updateSettings { it.copy(clockInRangeEnabled = true, clockInStartMinute = start, clockInEndMinute = end) }
+            }
+        }
     }
     ScreenColumn { Text("设置", color = SText, fontSize = 25.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-.4).sp); Text("外观、工时与仅保存在本机的偏好", color = SMuted)
         SettingCard("外观主题", "五套低饱和玻璃主题，减少大块实色带来的压迫感") {
@@ -239,17 +258,89 @@ private fun statusLabel(day: WorkDay) = when (day.status()) { DayStatus.REST_DAY
                 }
             }
         }
+        SettingCard("首页打卡时间", "自定义常用上班时段；开启后首页输入和滑杆都会使用这个范围") {
+            SwitchRow("限制首页打卡时段", settings.clockInRangeEnabled) { enabled ->
+                vm.updateSettings { it.copy(clockInRangeEnabled = enabled) }
+            }
+            AnimatedVisibility(settings.clockInRangeEnabled) {
+                Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
+                        CompactSettingTimeField("开始", clockInStart, { raw -> clockInStart = normalizedSettingTimeInput(clockInStart, raw); clockInRangeError = null }, Modifier.weight(1f))
+                        CompactSettingTimeField("结束", clockInEnd, { raw -> clockInEnd = normalizedSettingTimeInput(clockInEnd, raw); clockInRangeError = null }, Modifier.weight(1f))
+                        Button(onClick = { saveClockInRange() }, modifier = Modifier.height(54.dp), shape = RoundedCornerShape(15.dp), colors = ButtonDefaults.buttonColors(containerColor = SAccent, contentColor = ClockOutVisuals.colors.onAccent), contentPadding = PaddingValues(horizontal = 15.dp)) { Text("保存", fontWeight = FontWeight.SemiBold) }
+                    }
+                    Text("例如 830～900；首页滑杆会自动同步", color = SWeak, fontSize = 11.sp)
+                    clockInRangeError?.let { Text(it, color = SRose, fontSize = 11.sp) }
+                }
+            }
+            if (!settings.clockInRangeEnabled) Text("当前为自由输入，不显示打卡时间滑杆", color = SWeak, fontSize = 11.sp)
+        }
         SettingCard("默认工作时长", "输入 8 即为 8 小时，输入 7.5 即为 7 小时 30 分钟") {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(value = customWork, onValueChange = { raw -> customWork = normalizedDecimalInput(raw); workError = null }, placeholder = { Text("8") }, suffix = { Text("小时", color = SMuted) }, supportingText = workError?.let { message -> { Text(message, color = SRose) } }, isError = workError != null, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { saveWork() }), shape = RoundedCornerShape(18.dp), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = SAccentStrong.copy(alpha = .72f), unfocusedBorderColor = SBorder, focusedContainerColor = SText.copy(alpha = .035f), unfocusedContainerColor = SText.copy(alpha = .02f)), modifier = Modifier.weight(1f).height(58.dp)); Spacer(Modifier.width(8.dp)); Button(onClick = { saveWork() }, shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = SAccent, contentColor = ClockOutVisuals.colors.onAccent), modifier = Modifier.height(48.dp)) { Text("保存") }
+            Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    BasicTextField(
+                        value = customWork,
+                        onValueChange = { raw -> customWork = normalizedDecimalInput(raw); workError = null },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { saveWork() }),
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = SText, fontWeight = FontWeight.SemiBold),
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(SAccentStrong),
+                        modifier = Modifier.weight(1f).height(48.dp).clip(RoundedCornerShape(16.dp)).background(SText.copy(alpha = .025f)).border(1.dp, if (workError == null) SBorder else SRose, RoundedCornerShape(16.dp)).padding(horizontal = 14.dp),
+                        decorationBox = { inner ->
+                            Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+                                Box(Modifier.weight(1f)) { if (customWork.isEmpty()) Text("8", color = SWeak); inner() }
+                                Text("小时", color = SMuted, fontSize = 13.sp)
+                            }
+                        },
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Button(onClick = { saveWork() }, shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = SAccent, contentColor = ClockOutVisuals.colors.onAccent), modifier = Modifier.height(48.dp)) { Text("保存") }
+                }
+                workError?.let { Text(it, color = SRose, fontSize = 11.sp) }
             }
         }
-        SettingCard("首页午休调整", "控制首页是否显示午休模式、滑杆与快捷时长；不会删除已有午休记录") { SwitchRow("在首页显示午休调整", settings.showLunchControls) { value -> vm.updateSettings { it.copy(showLunchControls = value) } } }
+        SettingCard("首页午休调整", "选择实际午休的常用记录方式；不会删除已有午休记录") {
+            SwitchRow("在首页显示午休调整", settings.showLunchControls) { value -> vm.updateSettings { it.copy(showLunchControls = value) } }
+            Text("午休开始输入方式", color = SMuted, fontSize = 12.sp)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(LunchInputStyle.QUICK to "快速输入", LunchInputStyle.WHEEL to "时间滚轮").forEach { (style, label) ->
+                    FilterChip(
+                        selected = settings.lunchInputStyle == style,
+                        onClick = { vm.updateSettings { it.copy(lunchInputStyle = style) } },
+                        label = { Text(label, maxLines = 1) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+            Text(if (settings.lunchInputStyle == LunchInputStyle.QUICK) "输入 1230 会自动识别为 12:30" else "滚轮范围 11:40～12:30，默认 12:00", color = SWeak, fontSize = 11.sp)
+        }
         SettingCard("临近下班通知", "仅发送 ClockOut 本机 App 通知，不联网；触发精度可能受系统省电策略影响") { SwitchRow("开启本地通知", settings.reminderEnabled) { enabled -> vm.updateSettings { it.copy(reminderEnabled = enabled) }; if (enabled && Build.VERSION.SDK_INT >= 33) permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }; if (settings.reminderEnabled) { Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf(5, 10, 30, 0).forEach { lead -> FilterChip(selected = settings.reminderLeadMinutes == lead, onClick = { vm.updateSettings { it.copy(reminderLeadMinutes = lead) } }, label = { Text(if (lead == 0) "到点通知" else "提前 $lead 分钟") }) } }; Row(verticalAlignment = Alignment.CenterVertically) { OutlinedTextField(value = customLead, onValueChange = { customLead = it.filter(Char::isDigit) }, label = { Text("自定义提前分钟") }, singleLine = true, modifier = Modifier.weight(1f)); Spacer(Modifier.width(8.dp)); TextButton(onClick = { customLead.toIntOrNull()?.let { lead -> vm.updateSettings { it.copy(reminderLeadMinutes = lead.coerceIn(0, 1440)) } } }, colors = ButtonDefaults.textButtonColors(contentColor = SAccentStrong)) { Text("应用", fontWeight = FontWeight.SemiBold) } } } }
         SettingCard("体验", "保持界面安静，也可以关闭触感") { SwitchRow("震动反馈", settings.hapticsEnabled) { value -> vm.updateSettings { it.copy(hapticsEnabled = value) } }; SwitchRow("24 小时制显示", settings.use24Hour) { value -> vm.updateSettings { it.copy(use24Hour = value) } } }
         SettingCard("数据与隐私", "ClockOut 不联网、不登录、不使用广告或统计 SDK。数据只存储在应用私有目录。") { OutlinedButton(onClick = onDeleteAll, colors = ButtonDefaults.outlinedButtonColors(contentColor = SRose), modifier = Modifier.fillMaxWidth()) { Text("删除全部数据") } }
         Text("ClockOut ${BuildConfig.VERSION_NAME} · 个人使用版", color = SMuted, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
     }
+}
+
+@Composable
+private fun CompactSettingTimeField(label: String, value: String, onValueChange: (String) -> Unit, modifier: Modifier) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        prefix = { Text(label, color = SMuted, fontSize = 9.sp) },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
+        shape = RoundedCornerShape(15.dp),
+        textStyle = MaterialTheme.typography.bodyMedium.copy(color = SText, fontWeight = FontWeight.SemiBold),
+        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = SAccentStrong.copy(alpha = .65f), unfocusedBorderColor = SBorder, focusedContainerColor = SText.copy(alpha = .035f), unfocusedContainerColor = SText.copy(alpha = .02f)),
+        modifier = modifier.height(54.dp),
+    )
+}
+
+private fun normalizedSettingTimeInput(previous: String, raw: String): String {
+    val normalized = normalizeClockInput(previous, raw)
+    val digits = normalized.filter(Char::isDigit)
+    return if (!normalized.contains(':') && isCompleteCompactTime(digits)) parseMinuteOfDay(digits)?.let(::formatMinuteOfDay) ?: normalized else normalized
 }
 
 private fun hoursInput(minutes: Int): String = decimalHours(minutes.toLong())
@@ -287,9 +378,10 @@ private fun ThemeChoice(style: AppThemeStyle, selected: Boolean, modifier: Modif
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("编辑今日记录", color = SText, fontSize = 21.sp, fontWeight = FontWeight.SemiBold)
             val zone = remember(day.zoneId) { runCatching { java.time.ZoneId.of(day.zoneId) }.getOrDefault(java.time.ZoneId.systemDefault()) }
-            val savedMinute = day.clockIn?.atZone(zone)?.toLocalTime()?.let { it.hour * 60 + it.minute } ?: ClockInWindow.DEFAULT_MINUTE
+            val savedMinute = day.clockIn?.atZone(zone)?.toLocalTime()?.let { it.hour * 60 + it.minute }
+                ?: java.time.LocalTime.now(zone).let { it.hour * 60 + it.minute }
             var clockInMinute by remember(day.id, day.clockIn) { mutableIntStateOf(savedMinute) }
-            ClockInTimeEditor(label = "打卡时间", minuteOfDay = clockInMinute, onMinuteChange = { clockInMinute = it }, onCommit = vm::clockInAtMinute)
+            ClockInTimeEditor(label = "打卡时间", minuteOfDay = clockInMinute, onMinuteChange = { clockInMinute = it }, onCommit = { minute -> vm.saveRecord(day, "in", formatMinuteOfDay(minute)) })
             listOf("lunchStart" to "午休开始", "lunchEnd" to "午休结束", "out" to "下班").forEach { (field, label) -> EditableTimeRow(label, field, day, vm) }
             Spacer(Modifier.height(20.dp))
         }
