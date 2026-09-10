@@ -8,11 +8,12 @@ ClockOut 是一款面向个人使用的原生 Android 工时记录工具，用�
 
 ## 产品预览
 
-以下界面使用「晨雾」主题，截图来自 Android 真机。首页展示可配置范围的打卡时间输入与滑杆；设置页可启用、关闭或修改常用上班时段。
+以下界面使用「晨雾」主题，均为未经裁边的 Android 真机完整画面。依次展示首页、设置页和常用上班时段设置。
 
 <p align="center">
-  <img src="docs/screenshots/current/mist-today.png" width="38%" alt="ClockOut 晨雾主题今日页面" />
-  <img src="docs/screenshots/current/mist-settings-clock-in.png" width="38%" alt="ClockOut 晨雾主题打卡时间设置" />
+  <img src="docs/screenshots/current/mist-today.png" width="30%" alt="ClockOut 晨雾主题今日完整页面" />
+  <img src="docs/screenshots/current/mist-settings.png" width="30%" alt="ClockOut 晨雾主题设置完整页面" />
+  <img src="docs/screenshots/current/mist-settings-clock-in.png" width="30%" alt="ClockOut 晨雾主题打卡时间设置完整页面" />
 </p>
 
 ## 功能概览
