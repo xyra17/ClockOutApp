@@ -8,13 +8,43 @@ ClockOut 是一款面向个人使用的原生 Android 工时记录工具，用�
 
 ## 产品预览
 
-以下界面使用「晨雾」主题，均为未经裁边的 Android 真机完整画面。依次展示首页、设置页和常用上班时段设置。
+以下均为「晨雾」主题的 Android 真机完整长截图，没有裁切页面内容。点击对应页面即可展开查看原图。
 
-<p align="center">
-  <img src="docs/screenshots/current/mist-today.png" width="30%" alt="ClockOut 晨雾主题今日完整页面" />
-  <img src="docs/screenshots/current/mist-settings.png" width="30%" alt="ClockOut 晨雾主题设置完整页面" />
-  <img src="docs/screenshots/current/mist-settings-clock-in.png" width="30%" alt="ClockOut 晨雾主题打卡时间设置完整页面" />
-</p>
+### 今日
+
+用于完成上班、午休和下班记录。上班时间支持自定义范围滑杆与数字快速输入；午休可选择实际打卡或 0～90 分钟固定时长；时间轴集中展示当天各个时间节点。完成上班打卡后，主视觉区域切换为预计下班时间、剩余时长与计算依据。
+
+<details>
+  <summary>查看“今日”完整截图</summary>
+  <p align="center"><img src="docs/screenshots/current/mist-today-full.jpg" width="55%" alt="ClockOut 晨雾主题今日完整长截图" /></p>
+</details>
+
+### 记录
+
+默认查看本周记录，也可按日期定位。记录卡展示上班、午休、预计下班、实际下班和实际工时，支持进入详情补录或修改；历史记录可左滑删除，底部汇总本周或本月累计工时。
+
+<details>
+  <summary>查看“记录”完整截图</summary>
+  <p align="center"><img src="docs/screenshots/current/mist-records-full.jpg" width="55%" alt="ClockOut 晨雾主题记录完整长截图" /></p>
+</details>
+
+### 工程工具
+
+包含机械公式、单位换算和科学计算器。机械公式按强度、传动、切削、液压和几何分类，选择公式后输入参数即可在本机计算并显示结果与单位。
+
+<details>
+  <summary>查看“工程工具”完整截图</summary>
+  <p align="center"><img src="docs/screenshots/current/mist-tools-full.jpg" width="55%" alt="ClockOut 晨雾主题工程工具完整长截图" /></p>
+</details>
+
+### 设置
+
+用于选择主题与字体、自定义首页打卡时间范围和默认工作时长、切换午休快速输入或时间滚轮、设置临近下班本机通知，以及管理触觉反馈、24 小时制与本地数据。
+
+<details>
+  <summary>查看“设置”完整截图</summary>
+  <p align="center"><img src="docs/screenshots/current/mist-settings-full.jpg" width="55%" alt="ClockOut 晨雾主题设置完整长截图" /></p>
+</details>
 
 ## 功能概览
 
